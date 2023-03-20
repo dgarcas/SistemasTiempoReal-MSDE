@@ -3,6 +3,7 @@
 #include "cmsis_os.h"
 #include <math.h>
 #include "dwt_stm32_delay.h"
+#include "estados.c"
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
@@ -36,7 +37,7 @@ int encenderTodosLosMotores = 0;
 #define MOTOR_14 2
 #define MOTOR_15 3
 int estadoMotores[4] = { 0, 0, 0, 0 };
-int estadoEstatico = 0;
+enum ESTADOS estadoActual = inicio;
 
 //Vibraciones
 int vibracionesDetectadas = 0;
@@ -109,9 +110,11 @@ int main(void) {
 
 void iniciarSistema(void *argument) {
 	while (1) {
+		if(estadoActual == inicio){
 		xSemaphoreTake(interruptionSemaphore, portMAX_DELAY);
 		alturaReferencia = Calculate_Hight();
-		estadoEstatico = 1;
+		estadoActual = estatico;
+		}
 	}
 }
 
@@ -145,9 +148,9 @@ void comprobarVibraciones() {
 		estadoMotores[MOTOR_14] = 0;
 		estadoMotores[MOTOR_15] = 0;
 
-		if (estadoEstatico == 1) {
+		if (estadoActual == estatico) {
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-			estadoEstatico = 0;
+			estadoActual = vuelta;
 		}
 
 		vibracionesDetectadas = 1;
@@ -192,13 +195,13 @@ void controlMotores(void *argument) {
 
 void manejarMotores() {
 
-	if (estadoEstatico == 1) {
+	if (estadoActual == estatico) {
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, estadoMotores[MOTOR_12]);
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, estadoMotores[MOTOR_13]);
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, estadoMotores[MOTOR_14]);
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, estadoMotores[MOTOR_15]);
 
-	} else if (estadoEstatico == 0) {
+	} else {
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
 		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
