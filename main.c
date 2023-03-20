@@ -145,9 +145,11 @@ void comprobarVibraciones() {
 		estadoMotores[MOTOR_14] = 0;
 		estadoMotores[MOTOR_15] = 0;
 
-		HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+		if (estadoEstatico == 1) {
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
+			estadoEstatico = 0;
+		}
 
-		estadoEstatico = 0;
 		vibracionesDetectadas = 1;
 	}
 
