@@ -45,12 +45,17 @@ double vibracionEjeX = 0;
 double vibracionEjeY = 0;
 double vibracionEjeZ = 0;
 
+//Contadores
+int contadorCorrectorAltitud = 0;
+int contadorCorrectorEstabilidad = 0;
+
 //Periodos
 static int ALTITUD_TAREA_PERIODO_MS = 300;
 static int ESTABILIZAR_TAREA_PREIODO_MS = 200;
 static int CONTROL_MOTORES_TAREA_PERIDO_MS = 150;
 static int DETECTAR_VIBRACIONES_TAREA_PERIODO_MS = 350;
 static int INICIO_SISTEMA_TAREA_PERIODO_MS = 500;
+static int COMUNICACION_BASE_TAREA_PERIODO_MS = 2000;
 
 uint8_t spiTxBuf[2], spiRxBuf[2];
 uint8_t SPI_Read(uint8_t address);
@@ -71,6 +76,8 @@ int detectarVibracion(void);
 void comprobarVibraciones(void);
 void iniciarSistema(void *argument);
 void encenderOApagarMotores();
+void comunicacionBase(void *argument);
+void enviarDatos();
 
 int main(void) {
 
@@ -103,10 +110,36 @@ int main(void) {
 	configMINIMAL_STACK_SIZE,
 	NULL, 1,
 	NULL);
+	xTaskCreate(comunicacionBase, "comunicacionBase",
+	configMINIMAL_STACK_SIZE,
+	NULL, 1,
+	NULL);
 	vTaskStartScheduler();
 
 	while (1) {
 	}
+}
+
+void comunicacionBase(void *argument) {
+	TickType_t xLastWakeTime;
+
+	while (1) {
+		xSemaphoreTake(xSemaphore, portMAX_DELAY);
+
+		enviarDatos();
+
+		xSemaphoreGive(xSemaphore);
+		vTaskDelayUntil(&xLastWakeTime,
+				pdMS_TO_TICKS(COMUNICACION_BASE_TAREA_PERIODO_MS));
+	}
+}
+
+void enviarDatos() {
+
+	printf("Correctiones altitud realizadas: %i\n", contadorCorrectorAltitud);
+	printf("Correctiones estabilidad realizadas: %i\n",
+			contadorCorrectorEstabilidad);
+	printf("Altitud actual: %i\n", Calculate_Hight());
 }
 
 void iniciarSistema(void *argument) {
@@ -166,9 +199,9 @@ void comprobarVibraciones() {
 int detectarVibracion() {
 	int vibracion = 0;
 
-	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.02
-			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.02
-			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.02) {
+	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.1
+			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.1
+			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.1) {
 		vibracion = 1;
 	}
 
@@ -238,9 +271,13 @@ void estabilizarMotores(int motorA, int motorB, double rotacion) {
 		estadoMotorA = 0;
 		estadoMotorB = 1;
 
+		contadorCorrectorEstabilidad++;
+
 	} else if (rotacion > 10) {
 		estadoMotorA = 1;
 		estadoMotorB = 0;
+
+		contadorCorrectorEstabilidad++;
 	} else {
 		estadoMotorA = 0;
 		estadoMotorB = 0;
@@ -273,6 +310,8 @@ void encenderOApagarMotores() {
 		estadoMotores[MOTOR_13] = 1;
 		estadoMotores[MOTOR_14] = 1;
 		estadoMotores[MOTOR_15] = 1;
+
+		contadorCorrectorAltitud++;
 	} else {
 		estadoMotores[MOTOR_12] = 0;
 		estadoMotores[MOTOR_13] = 0;
