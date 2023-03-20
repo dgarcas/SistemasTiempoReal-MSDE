@@ -121,8 +121,7 @@ void detectarVibraciones(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		if (estadoEstatico == 1)
-			comprobarVibraciones();
+		comprobarVibraciones();
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
@@ -181,8 +180,7 @@ void controlMotores(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		if (estadoEstatico == 1)
-			manejarMotores();
+		manejarMotores();
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
@@ -191,10 +189,19 @@ void controlMotores(void *argument) {
 }
 
 void manejarMotores() {
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, estadoMotores[MOTOR_12]);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, estadoMotores[MOTOR_13]);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, estadoMotores[MOTOR_14]);
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, estadoMotores[MOTOR_15]);
+
+	if (estadoEstatico == 1) {
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, estadoMotores[MOTOR_12]);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, estadoMotores[MOTOR_13]);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, estadoMotores[MOTOR_14]);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, estadoMotores[MOTOR_15]);
+
+	} else if (estadoEstatico == 0) {
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
+		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
+	}
 }
 
 void estabilizar(void *argument) {
@@ -205,10 +212,8 @@ void estabilizar(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		if (estadoEstatico == 1) {
-			estabilizarMotores(MOTOR_13, MOTOR_15, Calculate_RotationX());
-			estabilizarMotores(MOTOR_12, MOTOR_14, Calculate_RotationY());
-		}
+		estabilizarMotores(MOTOR_13, MOTOR_15, Calculate_RotationX());
+		estabilizarMotores(MOTOR_12, MOTOR_14, Calculate_RotationY());
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
@@ -243,8 +248,7 @@ void ajustarAltura(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		if (estadoEstatico == 1)
-			encenderOApagarMotores();
+		encenderOApagarMotores();
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
