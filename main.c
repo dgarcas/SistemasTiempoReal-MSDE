@@ -50,6 +50,7 @@ static int ALTITUD_TAREA_PERIODO_MS = 300;
 static int ESTABILIZAR_TAREA_PREIODO_MS = 200;
 static int CONTROL_MOTORES_TAREA_PERIDO_MS = 150;
 static int DETECTAR_VIBRACIONES_TAREA_PERIODO_MS = 350;
+static int INICIO_SISTEMA_TAREA_PERIODO_MS = 500;
 
 uint8_t spiTxBuf[2], spiRxBuf[2];
 uint8_t SPI_Read(uint8_t address);
@@ -109,12 +110,15 @@ int main(void) {
 }
 
 void iniciarSistema(void *argument) {
+	TickType_t xLastWakeTime;
 	while (1) {
-		if(estadoActual == inicio){
-		xSemaphoreTake(interruptionSemaphore, portMAX_DELAY);
-		alturaReferencia = Calculate_Hight();
-		estadoActual = estatico;
+		if (estadoActual == inicio) {
+			xSemaphoreTake(interruptionSemaphore, portMAX_DELAY);
+			alturaReferencia = Calculate_Hight();
+			estadoActual = estatico;
 		}
+		vTaskDelayUntil(&xLastWakeTime,
+				pdMS_TO_TICKS(INICIO_SISTEMA_TAREA_PERIODO_MS));
 	}
 }
 
@@ -162,9 +166,9 @@ void comprobarVibraciones() {
 int detectarVibracion() {
 	int vibracion = 0;
 
-	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.05
-			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.05
-			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.05) {
+	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.02
+			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.02
+			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.02) {
 		vibracion = 1;
 	}
 
