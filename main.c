@@ -32,12 +32,14 @@ double X, Y, Z;
 int alturaReferencia;
 int encenderTodosLosMotores = 0;
 
-#define MOTOR_12 0
-#define MOTOR_13 1
-#define MOTOR_14 2
-#define MOTOR_15 3
-int estadoMotores[4] = { 0, 0, 0, 0 };
-enum ESTADOS estadoActual = inicio;
+#define MOTOR_Y_NEGATIVO 0 // Y Negativo
+#define MOTOR_X_NEGATIVO 1 // X Negativo
+#define MOTOR_Y_POSITIVO 2 // Y postivo
+#define MOTOR_X_POSITIVO 3 // X postivo
+int estadoDeseadoMotores[4] = { 0, 0, 0, 0 };
+int encenderMotores = 0;
+enum ESTADOS estadoGlobal = inicio;
+enum HORIZONTALIDAD_ESTADOS estadoMotores = NNNN;
 
 //Vibraciones
 int vibracionesDetectadas = 0;
@@ -69,7 +71,8 @@ int Calculate_Hight(void);
 void estabilizar(void *argument);
 void estabilizarMotores(int motorA, int motorB, double rotacion);
 void controlMotores(void *argument);
-void manejarMotores(void);
+void manejarMotoresEstabilidad(void);
+void manejarMotoresAltura(void);
 void detectarVibraciones(void *argument);
 void actualizarVibraciones(void);
 int detectarVibracion(void);
@@ -78,6 +81,8 @@ void iniciarSistema(void *argument);
 void encenderOApagarMotores();
 void comunicacionBase(void *argument);
 void enviarDatos();
+enum HORIZONTALIDAD_ESTADOS getEstadoDeseado();
+void manejarMotores(int estadoDeMotores[]);
 
 int main(void) {
 
@@ -145,10 +150,15 @@ void enviarDatos() {
 void iniciarSistema(void *argument) {
 	TickType_t xLastWakeTime;
 	while (1) {
-		if (estadoActual == inicio) {
-			xSemaphoreTake(interruptionSemaphore, portMAX_DELAY);
+
+		xSemaphoreTake(interruptionSemaphore, portMAX_DELAY);
+
+		if (estadoGlobal == inicio) {
 			alturaReferencia = Calculate_Hight();
-			estadoActual = estatico;
+			estadoGlobal = estatico;
+		} else if (estadoGlobal == vuelta){
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, RESET);
+			estadoGlobal = estatico;
 		}
 		vTaskDelayUntil(&xLastWakeTime,
 				pdMS_TO_TICKS(INICIO_SISTEMA_TAREA_PERIODO_MS));
@@ -180,14 +190,20 @@ void comprobarVibraciones() {
 
 	if (vibracionesDetectadas >= 4) {
 
-		estadoMotores[MOTOR_12] = 0;
-		estadoMotores[MOTOR_13] = 0;
-		estadoMotores[MOTOR_14] = 0;
-		estadoMotores[MOTOR_15] = 0;
+		estadoDeseadoMotores[MOTOR_Y_NEGATIVO] = 0;
+		estadoDeseadoMotores[MOTOR_X_NEGATIVO] = 0;
+		estadoDeseadoMotores[MOTOR_Y_POSITIVO] = 0;
+		estadoDeseadoMotores[MOTOR_X_POSITIVO] = 0;
 
-		if (estadoActual == estatico) {
+		if (estadoGlobal != inicio) {
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
-			estadoActual = vuelta;
+
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, 0);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_13, 0);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_14, 0);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 0);
+
+			estadoGlobal = vuelta;
 		}
 
 		vibracionesDetectadas = 1;
@@ -199,9 +215,9 @@ void comprobarVibraciones() {
 int detectarVibracion() {
 	int vibracion = 0;
 
-	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.1
-			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.1
-			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.1) {
+	if (fabs(fabs(X) - fabs(vibracionEjeX)) >= 0.02
+			|| fabs(fabs(Y) - fabs(vibracionEjeY)) >= 0.02
+			|| fabs(fabs(Z) - fabs(vibracionEjeZ)) >= 0.02) {
 		vibracion = 1;
 	}
 
@@ -222,7 +238,12 @@ void controlMotores(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		manejarMotores();
+		if (estadoGlobal == estatico || estadoGlobal == accenso) {
+			manejarMotoresEstabilidad();
+			if (estadoMotores == NNNN) {
+				manejarMotoresAltura();
+			}
+		}
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
@@ -230,20 +251,152 @@ void controlMotores(void *argument) {
 	}
 }
 
-void manejarMotores() {
+void manejarMotoresAltura() {
+	if (!encenderMotores) {
+		int estadoDeMotores[4] = { 0, 0, 0, 0 };
+		manejarMotores(estadoDeMotores);
+		estadoGlobal = estatico;
+	} else {
+		int estadoDeMotores[4] = { 1, 1, 1, 1 };
+		manejarMotores(estadoDeMotores);
+		estadoGlobal = accenso;
+	}
+}
 
-	if (estadoActual == estatico) {
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, estadoMotores[MOTOR_12]);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, estadoMotores[MOTOR_13]);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, estadoMotores[MOTOR_14]);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, estadoMotores[MOTOR_15]);
+void manejarMotoresEstabilidad() {
+
+	enum HORIZONTALIDAD_ESTADOS estadoDeseado = getEstadoDeseado();
+
+	if (estadoMotores == NNNN) {
+		int estadoDeMotores[4];
+		switch (estadoDeseado) {
+
+		case NNNN:
+			if (estadoGlobal != accenso) {
+				estadoDeMotores[0] = 0;
+				estadoDeMotores[1] = 0;
+				estadoDeMotores[2] = 0;
+				estadoDeMotores[3] = 0;
+			}
+
+			break;
+		case NNPN:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 1;
+			estadoDeMotores[3] = 0;
+			break;
+		case NNPP:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 1;
+			estadoDeMotores[3] = 1;
+			break;
+		case NNNP:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 1;
+			break;
+		case PNNP:
+			estadoDeMotores[0] = 1;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 1;
+			break;
+		case PNNN:
+			estadoDeMotores[0] = 1;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 0;
+			break;
+		case PPNN:
+			estadoDeMotores[0] = 1;
+			estadoDeMotores[1] = 1;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 0;
+			break;
+		case NPNN:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 1;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 0;
+			break;
+		case NPPN:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 1;
+			estadoDeMotores[2] = 1;
+			estadoDeMotores[3] = 0;
+			break;
+		default:
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 0;
+		}
+
+		manejarMotores(estadoDeMotores);
+		estadoMotores = estadoDeseado;
 
 	} else {
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, 0);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, 0);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, 0);
-		HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
+		if (estadoMotores != estadoDeseado) {
+			estadoMotores = NNNN;
+		}
 	}
+
+}
+
+void manejarMotores(int estadoDeMotores[]) {
+
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, estadoDeMotores[MOTOR_Y_NEGATIVO]);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, estadoDeMotores[MOTOR_X_NEGATIVO]);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, estadoDeMotores[MOTOR_Y_POSITIVO]);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, estadoDeMotores[MOTOR_X_POSITIVO]);
+}
+
+enum HORIZONTALIDAD_ESTADOS getEstadoDeseado() {
+
+	int estado = 0;
+	enum HORIZONTALIDAD_ESTADOS estadoATransitar;
+
+	for (int i = 0; i < 4; i++) {
+		estado = 10 * estado + estadoDeseadoMotores[i];
+	}
+
+	switch (estado) {
+
+	case 0:
+		estadoATransitar = NNNN;
+		break;
+	case 10:
+		estadoATransitar = NNPN;
+		break;
+	case 11:
+		estadoATransitar = NNPP;
+		break;
+	case 1:
+		estadoATransitar = NNNP;
+		break;
+	case 1001:
+		estadoATransitar = PNNP;
+		break;
+	case 1000:
+		estadoATransitar = PNNN;
+		break;
+	case 1100:
+		estadoATransitar = PPNN;
+		break;
+	case 100:
+		estadoATransitar = NPNN;
+		break;
+	case 110:
+		estadoATransitar = NPPN;
+		break;
+	default:
+		estadoATransitar = NNNN;
+
+	}
+	return estadoATransitar;
 }
 
 void estabilizar(void *argument) {
@@ -254,8 +407,10 @@ void estabilizar(void *argument) {
 	while (1) {
 		xSemaphoreTake(xSemaphore, portMAX_DELAY);
 
-		estabilizarMotores(MOTOR_13, MOTOR_15, Calculate_RotationX());
-		estabilizarMotores(MOTOR_12, MOTOR_14, Calculate_RotationY());
+		estabilizarMotores(MOTOR_X_NEGATIVO, MOTOR_X_POSITIVO,
+				Calculate_RotationX());
+		estabilizarMotores(MOTOR_Y_NEGATIVO, MOTOR_Y_POSITIVO,
+				Calculate_RotationY());
 
 		xSemaphoreGive(xSemaphore);
 		vTaskDelayUntil(&xLastWakeTime,
@@ -283,8 +438,8 @@ void estabilizarMotores(int motorA, int motorB, double rotacion) {
 		estadoMotorB = 0;
 	}
 
-	estadoMotores[motorA] = estadoMotorA;
-	estadoMotores[motorB] = estadoMotorB;
+	estadoDeseadoMotores[motorA] = estadoMotorA;
+	estadoDeseadoMotores[motorB] = estadoMotorB;
 
 }
 
@@ -306,17 +461,10 @@ void ajustarAltura(void *argument) {
 void encenderOApagarMotores() {
 	int alturaActual = Calculate_Hight();
 	if ((alturaReferencia - alturaActual) >= 5) {
-		estadoMotores[MOTOR_12] = 1;
-		estadoMotores[MOTOR_13] = 1;
-		estadoMotores[MOTOR_14] = 1;
-		estadoMotores[MOTOR_15] = 1;
-
+		encenderMotores = 1;
 		contadorCorrectorAltitud++;
 	} else {
-		estadoMotores[MOTOR_12] = 0;
-		estadoMotores[MOTOR_13] = 0;
-		estadoMotores[MOTOR_14] = 0;
-		estadoMotores[MOTOR_15] = 0;
+		encenderMotores = 0;
 	}
 }
 
