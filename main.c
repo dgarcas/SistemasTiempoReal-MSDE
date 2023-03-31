@@ -31,7 +31,9 @@ int ContTarea1 = 0;
 double X, Y, Z;
 int alturaReferencia;
 int encenderTodosLosMotores = 0;
+int iteracionesSinEjecutarAltura = 0;
 
+#define ITERACIONES_MAXIMA 10
 #define MOTOR_Y_NEGATIVO 0 // Y Negativo
 #define MOTOR_X_NEGATIVO 1 // X Negativo
 #define MOTOR_Y_POSITIVO 2 // Y postivo
@@ -156,7 +158,7 @@ void iniciarSistema(void *argument) {
 		if (estadoGlobal == inicio) {
 			alturaReferencia = Calculate_Hight();
 			estadoGlobal = estatico;
-		} else if (estadoGlobal == vuelta){
+		} else if (estadoGlobal == vuelta) {
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, RESET);
 			estadoGlobal = estatico;
 		}
@@ -198,10 +200,10 @@ void comprobarVibraciones() {
 		if (estadoGlobal != inicio) {
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_9, GPIO_PIN_SET);
 
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, 0);
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_13, 0);
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_14, 0);
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, 0);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_12, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_13, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_14, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_15, GPIO_PIN_RESET);
 
 			estadoGlobal = vuelta;
 		}
@@ -240,8 +242,13 @@ void controlMotores(void *argument) {
 
 		if (estadoGlobal == estatico || estadoGlobal == accenso) {
 			manejarMotoresEstabilidad();
-			if (estadoMotores == NNNN) {
+			if ((estadoMotores == NNNN)
+					|| (iteracionesSinEjecutarAltura >= ITERACIONES_MAXIMA)) {
 				manejarMotoresAltura();
+				estadoMotores = NNNN;
+				iteracionesSinEjecutarAltura = 0;
+			} else if (estadoGlobal == accenso) {
+				iteracionesSinEjecutarAltura++;
 			}
 		}
 
@@ -272,12 +279,12 @@ void manejarMotoresEstabilidad() {
 		switch (estadoDeseado) {
 
 		case NNNN:
-			if (estadoGlobal != accenso) {
-				estadoDeMotores[0] = 0;
-				estadoDeMotores[1] = 0;
-				estadoDeMotores[2] = 0;
-				estadoDeMotores[3] = 0;
-			}
+			//if (estadoGlobal != accenso) {
+			estadoDeMotores[0] = 0;
+			estadoDeMotores[1] = 0;
+			estadoDeMotores[2] = 0;
+			estadoDeMotores[3] = 0;
+			//}
 
 			break;
 		case NNPN:
